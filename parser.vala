@@ -6,7 +6,7 @@ namespace Peg
   {
     public Gee.List<Token> stream;
     public ArrayList<MatchTree> backstep;
-    public ArrayList<TreeMap<ParserElement, MatchTree>> packrat;
+    public HashTable<ParserElement, MatchTree>[] packrat;
     public int position;
     public int indent;
     public bool debug;
@@ -17,9 +17,9 @@ namespace Peg
       this.indent = 0;
       this.debug = false;
       // backstep = new ArrayList<MatchTree>(); // not used for now...
-      packrat = new ArrayList<TreeMap<ParserElement, MatchTree>>();
+      packrat = new HashTable<ParserElement, MatchTree>[stream.size];
       for(int i=0; i<stream.size; ++i)
-          packrat.add(new TreeMap<ParserElement, MatchTree>());
+          packrat[i] = new HashTable<ParserElement, MatchTree>(ParserElement.hash, ParserElement.eq);
     }
     
     public MatchTree? parse_stream(Gee.List<Token> stream, ParserElement root) {
@@ -38,12 +38,12 @@ namespace Peg
       return position < stream.size ? stream[position] : Token.get_eof();
     }
     
-    public MatchTree? cached(ParserElement element) {
+    public unowned MatchTree? cached(ParserElement element) {
       if( debug && element.trace ) {
-        stderr.printf(" got cached %s\n", (packrat[position][element] != null).to_string());
+        stderr.printf(" got cached %s\n", packrat[position].lookup(element).to_string());
         --indent;
       }
-      return packrat[position][element];
+      return packrat[position].lookup(element);
     }
     
     public bool speedup(ParserElement element) {
@@ -52,7 +52,9 @@ namespace Peg
         stderr.printf("Matching %s at %d...", element.name, position);
         ++indent;
       }
-      bool ret = (position < packrat.size) && (element in packrat[position]);
+      ParserElement a;
+      MatchTree b;
+      bool ret = (position < packrat.length) && (packrat[position].lookup_extended(element, out a, out b));
       if(debug && element.trace && !ret) {
         stderr.putc('\n');
       } 
@@ -69,11 +71,11 @@ namespace Peg
           stderr.printf("... matching %s consumed %d-%d!\n", element.name, tree.position, tree.end);
         }
       }
-      if(position < packrat.size) packrat[position][element] = tree;
+      if(position < packrat.length) packrat[position].insert(element, tree);
     }
         
     public MatchTree? revert_cached(ParserElement elem) {
-      MatchTree tree = packrat[position][elem];
+      MatchTree tree = packrat[position].lookup(elem);
       if(tree != null) position = tree.end;
       return tree;
     }
